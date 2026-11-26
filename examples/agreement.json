@@ -1,0 +1,29 @@
+{
+  "document": {
+    "sha256": "4e350a81ee2cfa0b6c7226fb2923616d47dbe0ba9243feae2f38380fb6cc53de",
+    "metadata": {
+      "id": "cninfo-1225682693",
+      "title": "魅视科技 重大框架协议及备忘录公告",
+      "subject": "001229",
+      "source_kind": "REAL",
+      "source_url": "https://static.cninfo.com.cn/finalpage/2026-11-21/1225682693.PDF",
+      "source_cluster": "cninfo-1225682693",
+      "disclosure_type": "AGREEMENT",
+      "published_date": "2026-11-21"
+    }
+  },
+  "gap": "业绩披露结构可保存财务期间的事实，但没有协议阶段、承诺口径及先决条件的位置。",
+  "migration": "通过精确引文为此协议生成条件协议投影。历史财务事实维持原数据；缺少结构化候选的协议进入待处理清单。",
+  "terms": {
+    "amount": { "value": "1164155942.99", "unit": "yuan", "currency": "CNY" },
+    "amount_role": "MEMORANDUM_CEILING",
+    "stage": "AWARDED_NOT_EFFECTIVE",
+    "recognition_basis": "NET_AFTER_FORMAL_CONTRACT",
+    "conditions": ["SIGN_AND_SEAL", "FORMAL_CONTRACT"]
+  },
+  "references": {
+    "amount_reference": {"page": 3, "quote": "备忘录的最高金额（含税价）：1,164,155,942.99 元。"},
+    "stage_reference": {"page": 1, "quote": "暂未生效，将自双方签字盖章之日起生效"},
+    "recognition_reference": {"page": 1, "quote": "署正式合同，将以净额法确认收入。"}
+  }
+}

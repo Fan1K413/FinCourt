@@ -1,0 +1,30 @@
+[
+  {
+    "id": "equal-cny-units",
+    "kind": "equivalent_amounts",
+    "inputs": [{"value":"1","unit":"yi_yuan","currency":"CNY"},{"value":"10000","unit":"wan_yuan","currency":"CNY"}],
+    "expected": true
+  },
+  {
+    "id": "currency-isolation",
+    "kind": "equivalent_amounts",
+    "inputs": [{"value":"100","unit":"yuan","currency":"CNY"},{"value":"100","unit":"yuan","currency":"USD"}],
+    "expected": false
+  },
+  {
+    "id": "before-correction-is-public",
+    "kind": "cutoff",
+    "cutoff": {"date":"2025-03-01"},
+    "published_date": "2025-04-12",
+    "published_at": null,
+    "expected": false
+  },
+  {
+    "id": "same-day-date-only",
+    "kind": "cutoff",
+    "cutoff": {"mode":"PUBLIC_INSTANT","at":"2025-04-12T12:00:00+08:00"},
+    "published_date": "2025-04-12",
+    "published_at": null,
+    "expected": false
+  }
+]
