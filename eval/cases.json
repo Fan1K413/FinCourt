@@ -1,0 +1,33 @@
+{
+  "label_origin": "开发阶段依据公告原文和模拟材料构造的检查标签。独立双人标注待补充。",
+  "groups": [
+    {
+      "id": "simulated-xingqiao-2024-annual",
+      "split": "development",
+      "source": "SIMULATED",
+      "subject": "DEMO-XINGQIAO",
+      "cases": [
+        {"claim": "sample-c1", "expected": "SUPPORTED", "fact": "sample-revenue-original", "page": 1},
+        {"claim": "sample-c2", "expected": "SUPPORTED", "fact": "sample-revenue-original", "page": 1},
+        {"claim": "sample-c3", "expected": "REFUTED", "fact": "sample-revenue-corrected", "page": 1},
+        {"claim": "sample-c4", "expected": "INSUFFICIENT", "fact": "sample-revenue-corrected", "page": 1},
+        {"claim": "sample-c5", "date": "2025-04-13", "expected": "REFUTED", "fact": "sample-revenue-corrected", "page": 1}
+      ]
+    },
+    {
+      "id": "guandian-2024-annual",
+      "split": "validation",
+      "source": "REAL",
+      "subject": "688287",
+      "cases": [
+        {"claim": "gd-c1", "expected": "SUPPORTED", "fact": "gd-revenue-original", "page": 1},
+        {"claim": "gd-c2", "expected": "SUPPORTED", "fact": "gd-revenue-original", "page": 1},
+        {"claim": "gd-c3", "expected": "REFUTED", "fact": "gd-revenue-corrected", "page": 2},
+        {"claim": "gd-c4", "expected": "INSUFFICIENT", "fact": "gd-revenue-corrected", "page": 2},
+        {"claim": "gd-c5", "date": "2025-04-13", "expected": "REFUTED", "fact": "gd-revenue-corrected", "page": 2}
+      ]
+    }
+  ],
+  "development_only_documents": ["cninfo-1225682693"],
+  "held_out_test_companies": []
+}
