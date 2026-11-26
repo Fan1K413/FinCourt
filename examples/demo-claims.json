@@ -1,0 +1,20 @@
+{
+  "REAL": {
+    "prefix": "gd",
+    "company": "观典防务",
+    "subject": "688287",
+    "original": "cninfo-1222663292",
+    "correction": "cninfo-1223072781",
+    "original_amount": "11893.72",
+    "corrected_amount": "8998.38"
+  },
+  "SIMULATED": {
+    "prefix": "sample",
+    "company": "星桥样例公司",
+    "subject": "DEMO-XINGQIAO",
+    "original": "sample-original",
+    "correction": "sample-correction",
+    "original_amount": "12000.00",
+    "corrected_amount": "9200.00"
+  }
+}
