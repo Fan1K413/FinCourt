@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import ssl
 from dataclasses import dataclass
 from typing import Annotated
 from urllib.parse import urlsplit
@@ -26,6 +27,7 @@ class NexentConfig:
     agent: str
     release: str
     mcp_secret: bytes
+    ca_file: str | None = None
 
     @classmethod
     def from_environment(cls):
@@ -59,7 +61,14 @@ class NexentConfig:
             raise DomainError(
                 "NEXENT_CONFIGURATION_INVALID", "请检查 Nexent 服务地址及 MCP 签名密钥", 503
             )
-        return cls(base.rstrip("/"), token, agent, release, secret.encode())
+        return cls(
+            base.rstrip("/"),
+            token,
+            agent,
+            release,
+            secret.encode(),
+            os.environ.get("FINCOURT_NEXENT_CA_FILE") or None,
+        )
 
 
 class AgentSubmission(Input):
@@ -110,10 +119,18 @@ async def _consume_stream(client, config, run_id, claim_text, context):
 
 
 async def request_agent(config, run_id, claim_text, context, transport=None):
+    verify = True
+    if config.ca_file:
+        try:
+            verify = ssl.create_default_context()
+            verify.load_verify_locations(cafile=config.ca_file)
+        except OSError as error:
+            raise DomainError("NEXENT_CA_INVALID", "无法加载 Nexent 内部 CA 证书", 503) from error
     try:
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(15, connect=5),
             follow_redirects=False,
+            verify=verify,
             transport=transport,
         ) as client:
             for attempt in range(2):

@@ -3,6 +3,7 @@ import json
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 from fincourt import schema_v1 as db
 from fincourt.agreement import import_agreement
 from fincourt.changes import confirm_event
@@ -226,3 +227,46 @@ def test_nexent_timeout_and_bounded_connection_retry():
             )
         )
     assert timed_out.value.code == "NEXENT_TIMEOUT"
+
+
+def test_private_mcp_listener_requires_explicit_host(workspace):
+    settings, engine, _ = workspace
+    secret = b"x" * 32
+    with pytest.raises(DomainError) as missing_hosts:
+        create_mcp(settings, secret, engine, host="0.0.0.0")
+    assert missing_hosts.value.code == "MCP_CONFIGURATION_INVALID"
+
+    server = create_mcp(
+        settings, secret, engine, host="0.0.0.0", allowed_hosts=("fincourt-mcp:8766",)
+    )
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": {"name": "deployment-check", "version": "1"},
+        },
+    }
+    headers = {"Accept": "application/json, text/event-stream"}
+    with TestClient(server.streamable_http_app(), base_url="http://fincourt-mcp:8766") as client:
+        assert client.post("/mcp", headers=headers, json=request).status_code == 200
+        foreign = client.post(
+            "/mcp", headers={**headers, "Host": "unlisted.invalid:8766"}, json=request
+        )
+        assert foreign.status_code == 421
+
+
+def test_nexent_rejects_missing_configured_ca(tmp_path):
+    config = NexentConfig(
+        "https://nexent.example.invalid",
+        "test-token",
+        "test-agent",
+        "v2.8.5",
+        b"x" * 32,
+        str(tmp_path / "missing.pem"),
+    )
+    with pytest.raises(DomainError) as invalid:
+        asyncio.run(request_agent(config, "review-id", "claim", "context"))
+    assert invalid.value.code == "NEXENT_CA_INVALID"

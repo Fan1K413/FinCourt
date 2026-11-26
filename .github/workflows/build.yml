@@ -1,0 +1,151 @@
+name: Build FinCourt
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Python checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.lock
+      - name: Install locked dependencies
+        run: python -m pip install -r backend/requirements.lock
+      - name: Check Python
+        run: |
+          python -m ruff check --config backend/pyproject.toml backend deploy eval scripts
+          python -m ruff format --check --config backend/pyproject.toml backend deploy eval scripts
+      - name: Run tests
+        run: python scripts/fincourt.py test
+
+  image:
+    name: Docker build and smoke test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      COMPOSE_ENV_FILES: var/fincourt-stack/stack.env
+      FINCOURT_STACK_IMAGE: fincourt-stack-app:ci
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Prepare and validate the unified Compose project
+        run: |
+          python3 deploy/prepare.py
+          docker compose config --quiet
+      - name: Build the application image
+        run: |
+          docker compose -f compose.yaml -f deploy/compose.build.yaml build \
+            --build-arg "FINCOURT_IMAGE_SOURCE=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --build-arg "FINCOURT_IMAGE_REVISION=$GITHUB_SHA" fincourt-api
+      - name: Start FinCourt with PostgreSQL
+        run: docker compose up -d --wait --wait-timeout 90 fincourt-api fincourt-mcp
+      - name: Check the workbench and fixture review
+        run: |
+          python3 - <<'PY'
+          import json
+          from urllib.request import Request, urlopen
+
+          base = "http://127.0.0.1:8080"
+          with urlopen(base + "/", timeout=5) as response:
+              assert b'<div id="root">' in response.read()
+          with urlopen(base + "/health", timeout=5) as response:
+              assert json.load(response) == {"status": "ok", "database": "postgresql", "mode": "fixture"}
+
+          correction = Request(
+              base + "/api/demo/correction", data=b"{}", headers={"Content-Type": "application/json"},
+          )
+          with urlopen(correction, timeout=15) as response:
+              event = json.load(response)
+          result = next(
+              item["review"]["result"] for item in event["claims"] if item["claim_id"] == "sample-c5"
+          )
+          assert result["decision"] == "REFUTED", result
+          assert result["change"]["previous_decision"] == "SUPPORTED", result["change"]
+          PY
+      - name: Check the private MCP connection
+        run: |
+          docker compose exec -T fincourt-api python - <<'PY'
+          import json
+          from urllib.request import Request, urlopen
+
+          request = Request(
+              "http://fincourt-mcp:8766/mcp",
+              data=json.dumps({
+                  "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                  "params": {"protocolVersion": "2025-03-26", "capabilities": {},
+                             "clientInfo": {"name": "ci", "version": "1"}},
+              }).encode(),
+              headers={"Accept": "application/json, text/event-stream", "Content-Type": "application/json"},
+          )
+          with urlopen(request, timeout=5) as response:
+              assert json.load(response)["result"]["serverInfo"]["name"] == "FinCourt"
+          PY
+      - name: Show FinCourt service status on failure
+        if: failure()
+        run: |
+          if test -f var/fincourt-stack/stack.env; then
+            docker compose ps -a fincourt-db fincourt-init fincourt-api fincourt-mcp
+          fi
+      - name: Save the tested image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker image save "$FINCOURT_STACK_IMAGE" | gzip -1 > "${RUNNER_TEMP}/fincourt-image.tar.gz"
+      - name: Upload the tested image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fincourt-image
+          path: ${{ runner.temp }}/fincourt-image.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+          overwrite: true
+
+  publish:
+    name: Publish the tested image to GHCR
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [tests, image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: fincourt-image
+          path: ${{ runner.temp }}
+      - name: Push commit and main tags
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          docker image load -i "${RUNNER_TEMP}/fincourt-image.tar.gz"
+          repository="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag fincourt-stack-app:ci "$repository:sha-$GITHUB_SHA"
+          docker push "$repository:sha-$GITHUB_SHA"
+
+          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          if [[ "$GITHUB_SHA" == "$current_sha" ]]; then
+            docker tag fincourt-stack-app:ci "$repository:main"
+            docker push "$repository:main"
+          fi

@@ -3,6 +3,7 @@ import time
 from uuid import uuid4
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import TypeAdapter
 from sqlalchemy import Engine, select
 
@@ -81,12 +82,33 @@ def snapshot_context(connection, secret, context):
     return run, snapshot
 
 
-def create_mcp(settings: Settings, secret: bytes, engine: Engine, port: int = 8766):
+def create_mcp(
+    settings: Settings,
+    secret: bytes,
+    engine: Engine,
+    port: int = 8766,
+    *,
+    host: str = "127.0.0.1",
+    allowed_hosts: tuple[str, ...] = (),
+):
     if len(secret) < 32:
         raise DomainError("MCP_CONFIGURATION_MISSING", "需要至少 32 字节的 MCP 签名密钥", 503)
+    if host not in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}:
+        raise DomainError("MCP_CONFIGURATION_INVALID", "无法识别 MCP 监听地址", 503)
+    if host == "0.0.0.0" and (not allowed_hosts or any("*" in value for value in allowed_hosts)):
+        raise DomainError("MCP_CONFIGURATION_INVALID", "私网监听需要明确的 MCP Host 列表", 503)
+    transport_security = (
+        TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=list(allowed_hosts),
+        )
+        if allowed_hosts
+        else None
+    )
     server = FastMCP(
         "FinCourt",
-        host="127.0.0.1",
+        host=host,
+        transport_security=transport_security,
         port=port,
         json_response=True,
         stateless_http=True,

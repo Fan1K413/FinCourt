@@ -58,10 +58,21 @@ def main():
         from fincourt.mcp_tools import create_mcp
 
         secret = os.environ.get("FINCOURT_MCP_SECRET", "").encode()
+        host = os.environ.get("FINCOURT_MCP_BIND_HOST", "127.0.0.1")
+        allowed_hosts = tuple(
+            entry.strip()
+            for entry in os.environ.get("FINCOURT_MCP_ALLOWED_HOSTS", "").split(",")
+            if entry.strip()
+        )
         try:
-            create_mcp(config, secret, engine, port=args.port or 8766).run(
-                transport="streamable-http"
-            )
+            create_mcp(
+                config,
+                secret,
+                engine,
+                port=args.port or 8766,
+                host=host,
+                allowed_hosts=allowed_hosts,
+            ).run(transport="streamable-http")
         finally:
             engine.dispose()
         return

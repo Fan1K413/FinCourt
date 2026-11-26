@@ -1,5 +1,7 @@
 # Nexent 联调
 
+同一套 Compose 中启动 FinCourt 与 Nexent 的方式见 [统一部署](../../deploy/README.md)。
+
 目前的兼容目标是 Nexent v2.8.5。以官方 Northbound SSE 合约实现适配器。已通过本地 MCP 会话及模拟 HTTP 响应验证协议闭环。平台、模型和网页端到端联调待完成。
 
 - [Nexent 发布页](https://github.com/ModelEngine-Group/nexent/releases/tag/v2.8.5)

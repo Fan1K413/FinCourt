@@ -1,0 +1,62 @@
+x-fincourt-link: &fincourt-link
+  nexent: {}
+  fincourt-link: {}
+
+services:
+  nexent-web:
+    ports: !override
+      - "127.0.0.1:${NEXENT_WEB_PORT:-3000}:3000"
+  nexent-northbound:
+    ports: !reset []
+    networks: *fincourt-link
+    depends_on:
+      nexent-sandbox-image:
+        condition: service_completed_successfully
+  nexent-config:
+    networks: *fincourt-link
+  nexent-mcp:
+    networks: *fincourt-link
+  nexent-runtime:
+    networks: *fincourt-link
+    depends_on:
+      nexent-sandbox-image:
+        condition: service_completed_successfully
+  nexent-sandbox-image:
+    image: ${NEXENT_SANDBOX_IMAGE}
+    entrypoint: ["/bin/sh", "-c", "exit 0"]
+    network_mode: none
+  nexent-data-process:
+    profiles: [nexent-data]
+  nexent-nginx:
+    ports: !reset []
+  kong:
+    ports: !reset []
+  auth:
+    environment:
+      GOTRUE_SITE_URL: ${SITE_URL}
+  nexent-elasticsearch:
+    volumes:
+      - nexent-elasticsearch-data:/usr/share/elasticsearch/data
+  nexent-postgresql:
+    volumes:
+      - nexent-postgresql-data:/var/lib/postgresql/data
+  redis:
+    volumes:
+      - nexent-redis-data:/data
+  nexent-minio:
+    volumes:
+      - nexent-minio-data:/data
+  db:
+    volumes:
+      - nexent-supabase-data:/var/lib/postgresql/data
+
+networks:
+  fincourt-link:
+    internal: true
+
+volumes:
+  nexent-elasticsearch-data:
+  nexent-postgresql-data:
+  nexent-redis-data:
+  nexent-minio-data:
+  nexent-supabase-data:

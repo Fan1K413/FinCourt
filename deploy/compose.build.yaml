@@ -1,0 +1,5 @@
+services:
+  fincourt-api:
+    build:
+      context: .
+      dockerfile: deploy/FinCourt.Dockerfile
