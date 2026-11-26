@@ -1,0 +1,72 @@
+{
+  "usage": "巨潮资讯公开公告。本库保存来源与核验候选，原文件在本地按需获取。",
+  "documents": [
+    {
+      "sha256": "a057406954ff08f34ccfbade071688d9dce998213d7eaf58d99ceb85f4c70b03",
+      "metadata": {
+        "id": "cninfo-1222663292",
+        "title": "观典防务 2024 年度业绩快报",
+        "subject": "688287",
+        "source_kind": "REAL",
+        "source_url": "https://static.cninfo.com.cn/finalpage/2025-02-28/1222663292.PDF",
+        "source_cluster": "cninfo-1222663292",
+        "disclosure_type": "RESULTS",
+        "published_date": "2025-02-28",
+        "facts": [
+          {
+            "id": "gd-revenue-original",
+            "metric": "operating_revenue",
+            "period": { "start": "2024-01-01", "end": "2024-12-31" },
+            "scope": "CONSOLIDATED",
+            "audit_status": "UNAUDITED",
+            "value": "11893.72",
+            "unit": "wan_yuan",
+            "currency": "CNY",
+            "page": 1,
+            "quote": "营业总收入 11,893.72 21,210.34 -43.92%"
+          },
+          {
+            "id": "gd-assets-original",
+            "metric": "total_assets",
+            "period": { "start": "2024-01-01", "end": "2024-12-31" },
+            "scope": "CONSOLIDATED",
+            "audit_status": "UNAUDITED",
+            "value": "102329.43",
+            "unit": "wan_yuan",
+            "currency": "CNY",
+            "page": 1,
+            "quote": "总资产 102,329.43 107,398.42 -4.72%"
+          }
+        ]
+      }
+    },
+    {
+      "sha256": "82f50cd9058cba8855a7f34085096c50cfb167e1be1710f32148600c04e91eb5",
+      "metadata": {
+        "id": "cninfo-1223072781",
+        "title": "观典防务 2024 年度业绩预告及业绩快报更正",
+        "subject": "688287",
+        "source_kind": "REAL",
+        "source_url": "https://static.cninfo.com.cn/finalpage/2025-04-12/1223072781.PDF",
+        "source_cluster": "cninfo-1223072781",
+        "disclosure_type": "CORRECTION",
+        "published_date": "2025-04-12",
+        "facts": [
+          {
+            "id": "gd-revenue-corrected",
+            "metric": "operating_revenue",
+            "period": { "start": "2024-01-01", "end": "2024-12-31" },
+            "scope": "CONSOLIDATED",
+            "audit_status": "UNAUDITED",
+            "value": "8998.38",
+            "unit": "wan_yuan",
+            "currency": "CNY",
+            "page": 2,
+            "quote": "更正后的营业总收入为 8,998.38 万元",
+            "replaces": ["gd-revenue-original"]
+          }
+        ]
+      }
+    }
+  ]
+}

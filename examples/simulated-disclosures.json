@@ -1,0 +1,80 @@
+{
+  "usage": "星桥样例公司为虚构主体。文字与数值仅用于离线回归和演示。",
+  "documents": [
+    {
+      "text": "【模拟公告】星桥样例公司年度业绩快报\n报告期：2024 年度，合并报表，未经审计。\n营业总收入 12,000.00 万元。\n总资产 30,000.00 万元。",
+      "metadata": {
+        "id": "sample-original",
+        "title": "星桥样例公司 2024 年度业绩快报",
+        "subject": "DEMO-XINGQIAO",
+        "source_kind": "SIMULATED",
+        "source_cluster": "sample-original",
+        "disclosure_type": "RESULTS",
+        "published_date": "2025-02-28",
+        "facts": [
+          {
+            "id": "sample-revenue-original",
+            "metric": "operating_revenue",
+            "period": { "start": "2024-01-01", "end": "2024-12-31" },
+            "scope": "CONSOLIDATED",
+            "audit_status": "UNAUDITED",
+            "value": "12000.00",
+            "unit": "wan_yuan",
+            "currency": "CNY",
+            "page": 1,
+            "quote": "营业总收入 12,000.00 万元。"
+          },
+          {
+            "id": "sample-assets-original",
+            "metric": "total_assets",
+            "period": { "start": "2024-01-01", "end": "2024-12-31" },
+            "scope": "CONSOLIDATED",
+            "audit_status": "UNAUDITED",
+            "value": "30000.00",
+            "unit": "wan_yuan",
+            "currency": "CNY",
+            "page": 1,
+            "quote": "总资产 30,000.00 万元。"
+          }
+        ]
+      }
+    },
+    {
+      "text": "【模拟公告】星桥样例公司快报更正\n仅更正 2024 年度营业总收入，仍为未经审计的合并口径。\n修正后营业总收入 0.92 亿元。",
+      "metadata": {
+        "id": "sample-correction",
+        "title": "星桥样例公司 2024 年度业绩快报更正",
+        "subject": "DEMO-XINGQIAO",
+        "source_kind": "SIMULATED",
+        "source_cluster": "sample-correction",
+        "disclosure_type": "CORRECTION",
+        "published_date": "2025-04-12",
+        "facts": [{
+          "id": "sample-revenue-corrected",
+          "metric": "operating_revenue",
+          "period": { "start": "2024-01-01", "end": "2024-12-31" },
+          "scope": "CONSOLIDATED",
+          "audit_status": "UNAUDITED",
+          "value": "0.92",
+          "unit": "yi_yuan",
+          "currency": "CNY",
+          "page": 1,
+          "quote": "修正后营业总收入 0.92 亿元。",
+          "replaces": ["sample-revenue-original"]
+        }]
+      }
+    },
+    {
+      "text": "【模拟公告】星桥样例公司业务进展\n发布经营进度补充说明。本次资料与年度营业总收入更正无关。",
+      "metadata": {
+        "id": "sample-update",
+        "title": "星桥样例公司业务进展",
+        "subject": "DEMO-XINGQIAO",
+        "source_kind": "SIMULATED",
+        "source_cluster": "sample-update",
+        "disclosure_type": "UPDATE",
+        "published_date": "2025-04-15"
+      }
+    }
+  ]
+}
