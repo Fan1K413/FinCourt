@@ -62,6 +62,5 @@ pnpm --dir frontend install --frozen-lockfile --store-dir ../var/pnpm-store
 - [五分钟演示、系统架构和资料清单](DEMO.md)
 - [小样本评测报告](eval/REPORT.md)
 - [Nexent 真实联调说明](integrations/nexent/README.md)
-- 根目录的 [compose.yaml](compose.yaml) 从 GHCR 拉取 FinCourt 镜像，可统一部署 Nexent、FinCourt、MCP 和数据库，也可只启动 fixture 所需的服务。[统一部署步骤](deploy/README.md)
-- 本地开发时可指定 `docker compose -f compose.dev.yaml up -d` 只启动 PostgreSQL。设置 `FINCOURT_POSTGRES_PASSWORD` 和 `FINCOURT_DATABASE_URL` 后运行 `scripts/fincourt.py migrate`。[变量示例](.env.example)
+- 根目录的 [compose.yaml](compose.yaml) 可直接导入容器面板，只启动 FinCourt 和业务 PostgreSQL。Nexent 按官方方式独立部署，FinCourt 通过北向 API 接入。密码和密钥通过面板环境变量或 `.env` 提供。[部署步骤](deploy/README.md)
 - [GitHub Actions 构建](.github/workflows/build.yml) 在推送到 `main` 或提交 PR 时构建镜像，用 PostgreSQL 和 MCP 验证离线流程。`main` 推送通过检查后，将同一镜像发布到 GHCR。

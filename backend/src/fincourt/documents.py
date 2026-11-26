@@ -86,6 +86,8 @@ def store_bytes(directory: Path, file_hash: str, content: bytes) -> None:
     try:
         with os.fdopen(fd, "wb") as stream:
             stream.write(content)
+        if os.environ.get("FINCOURT_EVIDENCE_GROUP_READ") == "1":
+            os.chmod(temporary, 0o640)
         os.replace(temporary, target)
     finally:
         Path(temporary).unlink(missing_ok=True)

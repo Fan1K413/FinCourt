@@ -15,11 +15,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY backend/requirements.lock /app/backend/requirements.lock
 RUN pip install --no-cache-dir -r backend/requirements.lock \
-    && mkdir -p /app/var/storage /app/var/source /run/fincourt-server /run/fincourt-ca \
-    && chown -R 10001:10001 /app/var /run/fincourt-server /run/fincourt-ca
+    && install -d -o 10001 -g 10001 /app/var /app/var/source /app/var/mcp-storage \
+    && install -d -o 0 -g 10001 -m 0710 /app/var/write \
+    && install -d -o 10001 -g 10002 -m 2750 /app/var/write/storage
 COPY backend/ /app/backend/
 COPY scripts/fincourt.py /app/scripts/fincourt.py
 COPY examples/ /app/examples/
-COPY deploy/tls.py deploy/nexent_admin.py /app/deploy/
+COPY deploy/serve.py /app/deploy/
 COPY --from=web /build/dist /app/frontend/dist
 USER 10001:10001

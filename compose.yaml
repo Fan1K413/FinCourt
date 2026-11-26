@@ -1,144 +1,87 @@
 name: fincourt-stack
 
-include:
-  - path:
-      - ${FINCOURT_STACK_VENDOR_DIR:?Run python deploy/prepare.py first}/deploy/docker/compose/docker-compose.prod.yml
-      - ${FINCOURT_STACK_VENDOR_DIR:?Run python deploy/prepare.py first}/deploy/docker/compose/docker-compose-supabase.prod.yml
-      - ./deploy/nexent.override.yaml
-    env_file: ${FINCOURT_STACK_VENDOR_DIR}/deploy/env/.env
-
-x-fincourt: &fincourt
-  image: ${FINCOURT_STACK_IMAGE:-ghcr.io/fan1k413/fincourt:main}
-
-x-fincourt-db: &fincourt-db
-  FINCOURT_DATABASE_URL: postgresql+psycopg://fincourt:${FINCOURT_STACK_DB_PASSWORD:?Run python deploy/prepare.py first}@fincourt-db:5432/fincourt
-  FINCOURT_STORAGE_DIR: /app/var/storage
-
 services:
-  fincourt-db:
-    image: postgres:17.9
+  fincourt-app:
+    container_name: fincourt-app
+    image: ${FINCOURT_STACK_IMAGE:-ghcr.io/fan1k413/fincourt:main}
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: fincourt
-      POSTGRES_USER: fincourt
-      POSTGRES_PASSWORD: ${FINCOURT_STACK_DB_PASSWORD}
-    volumes:
-      - fincourt-db-data:/var/lib/postgresql/data
-    networks: [fincourt-data]
-    healthcheck:
-      test: [CMD, pg_isready, -U, fincourt, -d, fincourt]
-      interval: 5s
-      timeout: 3s
-      retries: 15
-
-  fincourt-init:
-    <<: *fincourt
-    environment:
-      <<: *fincourt-db
-      FINCOURT_SEED_EXAMPLES: ${FINCOURT_STACK_SEED_EXAMPLES:-true}
-    command:
-      - /bin/sh
-      - -ec
-      - |
-        python deploy/tls.py /run/fincourt-server /run/fincourt-ca
-        if [ "$${FINCOURT_SEED_EXAMPLES}" = true ]; then
-          exec python scripts/fincourt.py seed-fixtures --stage initial
-        fi
-        exec python scripts/fincourt.py migrate
-    depends_on:
-      fincourt-db:
-        condition: service_healthy
-    volumes:
-      - fincourt-evidence:/app/var/storage
-      - fincourt-gateway-tls:/run/fincourt-server
-      - fincourt-ca:/run/fincourt-ca
-    networks: [fincourt-data]
-
-  fincourt-api:
-    <<: *fincourt
-    restart: unless-stopped
+    init: true
+    user: "0:0"
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, KILL, CHOWN]
+    security_opt: [no-new-privileges:true]
     ports:
       - "127.0.0.1:${FINCOURT_STACK_WEB_PORT:-8080}:8000"
+      - "127.0.0.1:${FINCOURT_STACK_MCP_PORT:-8766}:8766"
     environment:
-      <<: *fincourt-db
+      FINCOURT_STACK_DB_PASSWORD: ${FINCOURT_STACK_DB_PASSWORD:?Set FINCOURT_STACK_DB_PASSWORD}
+      FINCOURT_STORAGE_DIR: /app/var/write/storage
       FINCOURT_MODE: ${FINCOURT_STACK_MODE:-fixture}
-      FINCOURT_MCP_SECRET: ${FINCOURT_STACK_MCP_SECRET:?Run python deploy/prepare.py first}
-      FINCOURT_ADMIN_TOKEN: ${FINCOURT_STACK_ADMIN_TOKEN:?Run python deploy/prepare.py first}
-      FINCOURT_NEXENT_BASE_URL: https://fincourt-nexent-gateway:8443/api
-      FINCOURT_NEXENT_CA_FILE: /run/fincourt-ca/ca.pem
+      FINCOURT_SEED_EXAMPLES: ${FINCOURT_STACK_SEED_EXAMPLES:-true}
+      FINCOURT_MCP_SECRET: ${FINCOURT_STACK_MCP_SECRET:?Set FINCOURT_STACK_MCP_SECRET}
+      FINCOURT_ADMIN_TOKEN: ${FINCOURT_STACK_ADMIN_TOKEN:?Set FINCOURT_STACK_ADMIN_TOKEN}
+      FINCOURT_NEXENT_BASE_URL: ${FINCOURT_STACK_NEXENT_BASE_URL:-}
       FINCOURT_NEXENT_API_TOKEN: ${FINCOURT_STACK_NEXENT_TOKEN:-}
-      FINCOURT_NEXENT_AGENT_NAME: ${FINCOURT_STACK_NEXENT_AGENT:-fincourt-review}
-      FINCOURT_NEXENT_RELEASE: v2.8.5
-    command: [python, -m, uvicorn, --app-dir, backend/src, "fincourt.api:app", --host, "0.0.0.0", --port, "8000"]
+      FINCOURT_NEXENT_AGENT_NAME: ${FINCOURT_STACK_NEXENT_AGENT:-}
+      FINCOURT_NEXENT_RELEASE: ${FINCOURT_STACK_NEXENT_RELEASE:-}
+    command: [python, deploy/serve.py]
     depends_on:
-      fincourt-init:
-        condition: service_completed_successfully
+      fincourt-postgresql:
+        condition: service_healthy
     volumes:
-      - fincourt-evidence:/app/var/storage
-      - fincourt-sources:/app/var/source
-      - fincourt-ca:/run/fincourt-ca:ro
-    networks: [fincourt-web, fincourt-data, fincourt-link]
+      - ./data/fincourt/evidence:/app/var/write/storage
+      - ./data/fincourt/evidence:/app/var/mcp-storage:ro
+      - ./data/fincourt/sources:/app/var/source
+    networks: [fincourt-web, fincourt-data]
     healthcheck:
-      test: [CMD, python, -c, "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      test: [CMD, python, deploy/serve.py, health]
       interval: 10s
       timeout: 5s
       retries: 12
 
-  fincourt-mcp:
-    <<: *fincourt
+  fincourt-postgresql:
+    container_name: fincourt-postgresql
+    image: postgres:17.9
     restart: unless-stopped
-    command: [python, scripts/fincourt.py, mcp]
     environment:
-      <<: *fincourt-db
-      FINCOURT_MCP_SECRET: ${FINCOURT_STACK_MCP_SECRET}
-      FINCOURT_MCP_BIND_HOST: "0.0.0.0"
-      FINCOURT_MCP_ALLOWED_HOSTS: "fincourt-mcp:8766"
-    depends_on:
-      fincourt-init:
-        condition: service_completed_successfully
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${FINCOURT_POSTGRES_ADMIN_PASSWORD:-}
+      FINCOURT_STACK_DB_PASSWORD: ${FINCOURT_STACK_DB_PASSWORD:?Set FINCOURT_STACK_DB_PASSWORD}
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        if [ -z "$$POSTGRES_PASSWORD" ]; then
+          POSTGRES_PASSWORD="$$(od -An -N32 -tx1 /dev/urandom | tr -d '[:space:]')"
+          export POSTGRES_PASSWORD
+        fi
+        exec docker-entrypoint.sh "$$@"
+      - fincourt-postgresql
+    command: [postgres]
     volumes:
-      - fincourt-evidence:/app/var/storage:ro
-    networks: [fincourt-data, fincourt-link]
+      - ./data/fincourt/postgresql:/var/lib/postgresql/data
+    configs:
+      - source: fincourt-database
+        target: /docker-entrypoint-initdb.d/10-fincourt-database.sh
+    networks: [fincourt-data]
     healthcheck:
-      test: [CMD, python, -c, "import socket; socket.create_connection(('127.0.0.1', 8766), 3).close()"]
+      test: [CMD-SHELL, 'PGPASSWORD="$$FINCOURT_STACK_DB_PASSWORD" psql -h 127.0.0.1 -U fincourt -d fincourt -Atqc "SELECT 1"']
       interval: 5s
-      timeout: 4s
-      retries: 12
-
-  fincourt-nexent-gateway:
-    image: nginx:1.30.8-alpine
-    restart: unless-stopped
-    volumes:
-      - ./deploy/northbound.conf:/etc/nginx/conf.d/default.conf:ro
-      - fincourt-gateway-tls:/run/fincourt-server:ro
-    depends_on:
-      fincourt-init:
-        condition: service_completed_successfully
-      nexent-northbound:
-        condition: service_started
-    networks: [fincourt-link]
-
-  nexent-admin-init:
-    <<: *fincourt
-    command: [python, deploy/nexent_admin.py]
-    env_file: ${FINCOURT_STACK_VENDOR_DIR}/deploy/env/.env
-    depends_on:
-      kong:
-        condition: service_healthy
-      auth:
-        condition: service_healthy
-      nexent-config:
-        condition: service_started
-    networks: [nexent]
+      timeout: 3s
+      retries: 15
 
 networks:
   fincourt-web: {}
   fincourt-data:
     internal: true
 
-volumes:
-  fincourt-db-data:
-  fincourt-evidence:
-  fincourt-sources:
-  fincourt-gateway-tls:
-  fincourt-ca:
+configs:
+  fincourt-database:
+    content: |
+      psql --username postgres --dbname postgres --set ON_ERROR_STOP=1 <<'SQL'
+      \getenv fincourt_password FINCOURT_STACK_DB_PASSWORD
+      CREATE ROLE fincourt LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB PASSWORD :'fincourt_password';
+      CREATE DATABASE fincourt OWNER fincourt;
+      REVOKE CONNECT ON DATABASE fincourt FROM PUBLIC;
+      SQL

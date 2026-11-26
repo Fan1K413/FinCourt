@@ -41,23 +41,53 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      COMPOSE_ENV_FILES: var/fincourt-stack/stack.env
+      COMPOSE_ENV_FILES: var/compose.env
       FINCOURT_STACK_IMAGE: fincourt-stack-app:ci
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
-      - name: Prepare and validate the unified Compose project
+      - name: Prepare credentials and validate the root Compose file
         run: |
           python3 deploy/prepare.py
           docker compose config --quiet
+          test "$(docker compose config --services | sort)" = "$(printf '%s\n' fincourt-app fincourt-postgresql)"
+          test -z "$(docker compose config --volumes)"
+          FINCOURT_STACK_MODE=live FINCOURT_STACK_NEXENT_BASE_URL=https://nexent.example.test \
+            FINCOURT_STACK_NEXENT_TOKEN=ci-placeholder FINCOURT_STACK_NEXENT_AGENT=fincourt-review \
+            FINCOURT_STACK_NEXENT_RELEASE=v2.8.5 docker compose config --format json | python3 -c '
+          import json, sys
+          services = json.load(sys.stdin)["services"]
+          assert set(services) == {"fincourt-app", "fincourt-postgresql"}
+          app = services["fincourt-app"]
+          assert {port["target"] for port in app["ports"]} == {8000, 8766}
+          assert all(port["host_ip"] == "127.0.0.1" for port in app["ports"])
+          env = app["environment"]
+          assert env["FINCOURT_MODE"] == "live"
+          assert env["FINCOURT_NEXENT_BASE_URL"] == "https://nexent.example.test"
+          assert env["FINCOURT_NEXENT_API_TOKEN"] == "ci-placeholder"
+          assert env["FINCOURT_NEXENT_AGENT_NAME"] == "fincourt-review"
+          assert env["FINCOURT_NEXENT_RELEASE"] == "v2.8.5"
+          '
       - name: Build the application image
         run: |
-          docker compose -f compose.yaml -f deploy/compose.build.yaml build \
+          docker build -f deploy/FinCourt.Dockerfile -t "$FINCOURT_STACK_IMAGE" \
             --build-arg "FINCOURT_IMAGE_SOURCE=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
-            --build-arg "FINCOURT_IMAGE_REVISION=$GITHUB_SHA" fincourt-api
+            --build-arg "FINCOURT_IMAGE_REVISION=$GITHUB_SHA" .
       - name: Start FinCourt with PostgreSQL
-        run: docker compose up -d --wait --wait-timeout 90 fincourt-api fincourt-mcp
+        run: docker compose up -d --wait --wait-timeout 90
+      - name: Verify the FinCourt PostgreSQL database and application role
+        run: |
+          docker compose exec -T fincourt-postgresql psql --username fincourt --dbname fincourt --set ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user AND (rolsuper OR rolcreaterole OR rolcreatedb))
+              OR EXISTS (SELECT 1 FROM pg_database WHERE datname = 'nexent') THEN
+              RAISE EXCEPTION 'FinCourt must run with its own unprivileged database role';
+            END IF;
+          END
+          $$;
+          SQL
       - name: Check the workbench and fixture review
         run: |
           python3 - <<'PY'
@@ -81,14 +111,16 @@ jobs:
           assert result["decision"] == "REFUTED", result
           assert result["change"]["previous_decision"] == "SUPPORTED", result["change"]
           PY
-      - name: Check the private MCP connection
+      - name: Check the loopback MCP endpoint and read-only evidence
         run: |
-          docker compose exec -T fincourt-api python - <<'PY'
+          docker compose exec -T fincourt-app python deploy/serve.py health
+          python3 - <<'PY'
           import json
+          from urllib.error import HTTPError
           from urllib.request import Request, urlopen
 
           request = Request(
-              "http://fincourt-mcp:8766/mcp",
+              "http://127.0.0.1:8766/mcp",
               data=json.dumps({
                   "jsonrpc": "2.0", "id": 1, "method": "initialize",
                   "params": {"protocolVersion": "2025-03-26", "capabilities": {},
@@ -98,12 +130,40 @@ jobs:
           )
           with urlopen(request, timeout=5) as response:
               assert json.load(response)["result"]["serverInfo"]["name"] == "FinCourt"
+
+          request.add_header("Host", "invalid.example")
+          try:
+              urlopen(request, timeout=5)
+          except HTTPError as error:
+              assert error.code == 421
+          else:
+              raise AssertionError("MCP accepted an unexpected Host header")
+          PY
+          docker compose exec -T -u 10002:10002 fincourt-app python - <<'PY'
+          import errno
+          from pathlib import Path
+
+          evidence = Path("/app/var/mcp-storage")
+          assert any(item.read_bytes() for item in evidence.iterdir() if item.is_file())
+          try:
+              (evidence / "mcp-write-test").touch()
+          except OSError as error:
+              assert error.errno in {errno.EROFS, errno.EACCES}
+          else:
+              raise AssertionError("MCP wrote to the evidence volume")
+          try:
+              list(Path("/app/var/write/storage").iterdir())
+          except PermissionError:
+              pass
+          else:
+              raise AssertionError("MCP accessed the writable evidence path")
           PY
       - name: Show FinCourt service status on failure
         if: failure()
         run: |
-          if test -f var/fincourt-stack/stack.env; then
-            docker compose ps -a fincourt-db fincourt-init fincourt-api fincourt-mcp
+          if test -f var/compose.env; then
+            docker compose ps -a fincourt-postgresql fincourt-app
+            docker compose logs --tail=100 fincourt-app
           fi
       - name: Save the tested image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

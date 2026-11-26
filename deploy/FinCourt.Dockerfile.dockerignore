@@ -19,7 +19,6 @@
 !examples/
 !examples/*.json
 !deploy/
-!deploy/tls.py
-!deploy/nexent_admin.py
+!deploy/serve.py
 **/__pycache__
 **/*.pyc
