@@ -6,13 +6,15 @@
 
 FinCourt 把研究观点与公告原文、财务口径和计算过程关联起来。用户可以按指定时点审查观点，也可以持续跟踪最新披露。更正公告进入后，系统按更正字段定位受影响的滚动观点，并保存新的审查结果供对比。
 
-**当前状态：规格已编写，应用待开发。** 本地启动入口将在实际运行验证后补入此处。完整需求、逐项任务和验收用例见 [项目规格](Note.md)。
+**当前状态：fixture 最小流程可运行。** 已验证公告导入、观点审查、更正重审、历史回放和本地知识版本发布回滚。真实 Nexent、PostgreSQL 联调和正式评测仍待验收。[项目规格](Note.md) · [开发记录](DEVELOPMENT.md)
 
 ## 首个可运行交付
 
-在网页上选择一个演示观点，查看截止当日可用的公告、引用页码和金额计算。导入更正公告后，同一个滚动观点生成新的核验结果，历史结果仍可查看。固定时点的观点始终按其原定截止日期审查。
+在「观点审查」选择滚动观点，点击证据跳转到公告原页。打开「变化影响」并导入模拟更正，查看自动重审和证据差异，再从「历史记录」查看更正前的结果。固定观点沿用原截止时点。
 
-首例围绕观典防务（688287）的 2024 年度营业总收入展开。2025 年 2 月 28 日的业绩快报披露 11,893.72 万元，2025 年 4 月 12 日的更正公告将其修正为 8,998.38 万元。演示将核验两份披露中的金额是否超过 1 亿元，并保留公告页码和原始口径。[业绩快报](https://static.cninfo.com.cn/finalpage/2025-02-28/1222663292.PDF) · [更正公告](https://static.cninfo.com.cn/finalpage/2025-04-12/1223072781.PDF)
+真实案例核验观典防务（688287）2024 年度披露的营业总收入是否超过 1 亿元。原快报第 1 页披露 11,893.72 万元，更正公告第 2 页修正为 8,998.38 万元。[业绩快报](https://static.cninfo.com.cn/finalpage/2025-02-28/1222663292.PDF) · [更正公告](https://static.cninfo.com.cn/finalpage/2025-04-12/1223072781.PDF)
+
+![FinCourt 离线模式的审查结果和证据定位](assets/workbench.png)
 
 ## 开发路线
 
@@ -31,3 +33,33 @@ FinCourt 把研究观点与公告原文、财务口径和计算过程关联起�
 
 - `fixture` 用明确标注的预设抽取候选启动离线演示，由领域服务执行时间过滤、金额换算和判断。真实公告与模拟资料分别标记。
 - `live` 由实际配置的 Nexent 和模型通过 MCP 工具取证。缺少配置或调用失败时返回明确错误。真实集成以可复现的真实调用记录验收。
+
+## 本地运行
+
+需要 Python 3.10+、Node.js 20.19+ 和 pnpm 10。以下为 PowerShell 命令。
+
+```powershell
+python -m venv .venv
+$FinCourtPython = ".\.venv\Scripts\python.exe"
+& $FinCourtPython -m pip install -r backend/requirements.lock
+pnpm --dir frontend install --frozen-lockfile --store-dir ../var/pnpm-store
+& $FinCourtPython scripts/fincourt.py demo
+```
+
+打开 [本地工作台](http://127.0.0.1:8000)。离线演示默认使用 `var/` 下的 SQLite 和原文存储。演示导入可重复执行，历史记录保留在数据库中。可在另一终端导入真实案例或运行检查。
+
+```powershell
+.\.venv\Scripts\python.exe scripts/fincourt.py import-demo
+.\.venv\Scripts\python.exe scripts/fincourt.py import-agreement
+.\.venv\Scripts\python.exe scripts/fincourt.py test
+.\.venv\Scripts\python.exe eval/run.py --real
+```
+
+`import-demo` 和 `import-agreement` 按来源清单下载公开 PDF、校验哈希并保存到本地。测试只读取已有缓存。运行 `eval/run.py` 时省略 `--real` 即可评估纯模拟案例。
+
+协议案例可在「知识版本」验证。审批和本地发布需要在启动服务的进程配置 `FINCOURT_ADMIN_TOKEN`，并在页面输入同一凭据。
+
+- [五分钟演示、系统架构和资料清单](DEMO.md)
+- [小样本评测报告](eval/REPORT.md)
+- [Nexent 真实联调说明](integrations/nexent/README.md)
+- [PostgreSQL 配置](compose.yaml) 的联调环境需设置 `FINCOURT_POSTGRES_PASSWORD` 和 `FINCOURT_DATABASE_URL`，然后运行 `scripts/fincourt.py migrate`。[变量示例](.env.example)
