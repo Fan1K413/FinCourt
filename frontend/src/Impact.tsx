@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { metrics, request, sourceLabels, type Disclosure } from "./api";
+import { decisions, formatDecimal, metrics, request, sourceLabels, units, type Decision, type Disclosure } from "./api";
 
 interface EventSummary { id: string; title: string; document_id: string; created_at: string }
 interface Fact { id: string; metric: string; value: string; unit: string; period_end: string }
@@ -13,19 +13,15 @@ interface ImpactEvent {
     claim_id: string;
     status: string;
     reasons: string[];
-    review: { id: string; result: { claim_text: string; decision: string; change?: { previous_decision: string } } | null } | null;
+    review: { id: string; result: { claim_text: string; decision: Decision; change?: { previous_decision: Decision } } | null } | null;
   }[];
 }
 
-const unitLabels: Record<string, string> = { yuan: "元", wan_yuan: "万元", yi_yuan: "亿元" };
 const reasons: Record<string, string> = {
-  CORRECTED_FACT_DEPENDENCY: "依赖被更正的事实",
-  CORRECTED_REVIEW_EVIDENCE: "历史审查曾引用被更正的事实",
-  MATCHING_SUBJECT_METRIC_PERIOD: "主体、指标和报告期匹配",
-  TRANSITIVE_CLAIM_DEPENDENCY: "依赖另一个受影响的观点",
-};
-const decisions: Record<string, string> = {
-  SUPPORTED: "有证据支持", REFUTED: "被适用证据反驳", DISPUTED: "存在争议", INSUFFICIENT: "证据不足",
+  CORRECTED_FACT_DEPENDENCY: "涉及更正数据",
+  CORRECTED_REVIEW_EVIDENCE: "曾引用原披露",
+  MATCHING_SUBJECT_METRIC_PERIOD: "同一公司、指标与报告期",
+  TRANSITIVE_CLAIM_DEPENDENCY: "关联观点",
 };
 
 export function Impact({ mode, revision, onImport, onReview }: {
@@ -75,46 +71,59 @@ export function Impact({ mode, revision, onImport, onReview }: {
   const current = event?.id === selected ? event : null;
   return <>
     <div className="section-title">
-      <div><h1>变化影响</h1><p>查看披露变更的字段和自动重审结果。</p></div>
-      {mode === "fixture" && <button onClick={simulate} disabled={busy}>{busy ? "正在重审…" : "导入模拟更正"}</button>}
+      <h1>变化影响</h1>
+      {mode === "fixture" && <button className="section-action" onClick={simulate} disabled={busy}>
+        <span aria-hidden="true">＋</span> {busy ? "重审中…" : "导入模拟更正"}
+      </button>}
     </div>
     {error && <p className="error" role="alert">{error}</p>}
     <div className="split">
-      <section className="panel">
-        <div className="panel-heading"><h2>公告事件</h2></div>
-        {!events.length && <p className="empty">暂无已登记事件。</p>}
+      <section className="rail">
+        <div className="rail-heading"><h2>公告</h2></div>
         <ul className="record-list">{events.map(item => <li key={item.id}>
           <button className="record" aria-pressed={item.id === selected} onClick={() => setSelected(item.id)}>
-            {item.title}
+            <span className="record-title">{item.title}</span>
           </button>
         </li>)}</ul>
       </section>
-      <section className="panel">
-        {current ? <>
-          <div className="panel-heading"><h2>{current.document.title}</h2></div>
-          <p className="empty">{sourceLabels[current.document.source_kind]} · {current.document.published_date}</p>
-          {current.requires_confirmation && <p className="error">更正范围待确认，未匹配的字段暂不生效。</p>}
+      <section className="sheet" aria-busy={busy}>
+        {current ? <div key={current.id} className="sheet-content">
+          <header className="sheet-heading">
+            <p className="sheet-meta">{sourceLabels[current.document.source_kind]} <time>{current.document.published_date}</time></p>
+            <h2>{current.document.title}</h2>
+          </header>
+          {current.requires_confirmation && <p className="error" role="status">部分更正待确认</p>}
           <div className="result-section">
-            <h3>披露差异</h3>
+            <h3>更正前后</h3>
             {current.changes.length ? <ul className="details-list">{current.changes.map(({ before, after }) => <li key={after.id + (before?.id ?? "")}>
-              <strong>{metrics[after.metric] ?? after.metric}</strong> <span className="meta">{after.period_end}</span>
-              <p>{before ? before.value + " " + (unitLabels[before.unit] ?? before.unit) : "新增"} → {after.value} {unitLabels[after.unit] ?? after.unit}</p>
-            </li>)}</ul> : <p className="meta">本次公告没有可核验的字段变更。</p>}
+              <div className="comparison-heading"><strong>{metrics[after.metric] ?? after.metric}</strong> <time className="meta">{after.period_end}</time></div>
+              <div className="amount-pair">
+                <dl className="amount-slip"><dt>原披露</dt><dd>{before ? formatDecimal(before.value) + " " + (units[before.unit] ?? before.unit) : "—"}</dd></dl>
+                <span className="change-arrow" aria-hidden="true">→</span>
+                <dl className="amount-slip changed"><dt>{before ? "更正后" : "新增"}</dt><dd>{formatDecimal(after.value)} {units[after.unit] ?? after.unit}</dd></dl>
+              </div>
+            </li>)}</ul> : <p className="meta">没有可比变更</p>}
           </div>
           <div className="result-section">
             <h3>受影响观点</h3>
-            {current.claims.length ? <ul className="details-list">{current.claims.map(item => <li key={item.claim_id}>
-              {item.review ? <button className="link-button" onClick={() => onReview(item.claim_id, item.review!.id)}>
-                {item.review.result?.claim_text ?? item.claim_id}
-              </button> : <strong>{item.claim_id}</strong>}
-              <p>{item.review?.result ? (item.review.result.change?.previous_decision ?
-                decisions[item.review.result.change.previous_decision] + " → " : "") +
-                decisions[item.review.result.decision] : item.status === "FAILED" ? "运行失败" : "待重审"}</p>
-              <span className="meta">{item.reasons.map(reason => reasons[reason] ?? reason).join(" · ")}</span>
-            </li>)}</ul> : <p className="meta">本次变更没有触发滚动观点重审。</p>}
-            {current.fixed_claims_preserved.length > 0 && <p className="meta">有 {current.fixed_claims_preserved.length} 条相关固定观点保留原截止时点。</p>}
+            {current.claims.length ? <ul className="details-list affected-claims">{current.claims.map(item => {
+              const review = item.review;
+              const outcome = review?.result;
+              const before = outcome?.change?.previous_decision;
+              return <li key={item.claim_id}>
+                {review ? <button className="link-button" data-impact-claim={item.claim_id} onClick={() => onReview(item.claim_id, review.id)}>
+                  {outcome?.claim_text ?? item.claim_id} <span aria-hidden="true">↗</span>
+                </button> : <strong>{item.claim_id}</strong>}
+                <div className="outcome-comparison">
+                  {before && <><span className="decision" data-decision={before}>{decisions[before]}</span><span className="muted" aria-hidden="true">→</span></>}
+                  <span className="decision" data-decision={outcome?.decision}>{outcome ? decisions[outcome.decision] : item.status === "FAILED" ? "运行失败" : "待重审"}</span>
+                </div>
+                <p className="meta">{item.reasons.map(reason => reasons[reason]).filter(Boolean).join(" · ")}</p>
+              </li>;
+            })}</ul> : <p className="meta">无受影响观点</p>}
+            {current.fixed_claims_preserved.length > 0 && <p className="meta">{current.fixed_claims_preserved.length} 条固定观点保留原日期</p>}
           </div>
-        </> : <p className="empty">选择一条事件查看影响。</p>}
+        </div> : <p className="sheet-empty">{selected ? "读取中…" : "暂无变化"}</p>}
       </section>
     </div>
   </>;

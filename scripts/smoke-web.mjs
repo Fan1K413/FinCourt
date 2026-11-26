@@ -60,56 +60,101 @@ try {
     return (await call("Runtime.evaluate", { expression, returnByValue: true })).result.value;
   }
 
-  const clickText = text => evaluate(
-    "[...document.querySelectorAll('button')].find(b => b.offsetWidth && b.textContent.includes("
-    + JSON.stringify(text) + ")).click()",
-  );
-  await until(() => evaluate("document.querySelector('.verdict')?.textContent.includes('有证据支持')"),
-    "Initial rolling review was not rendered");
-  if (process.argv[3]) {
-    const image = await call("Page.captureScreenshot", { format: "png" });
-    writeFileSync(process.argv[3], Buffer.from(image.data, "base64"));
+  const width = Number(process.env.FINCOURT_SMOKE_WIDTH ?? 0);
+  if (width) {
+    await call("Emulation.setDeviceMetricsOverride", {
+      width, height: 844, deviceScaleFactor: 1, mobile: false,
+    });
   }
-  await clickText("支持 · 星桥样例公司 2024 年度业绩快报 · 第 1 页");
-  assert.match(await until(() => evaluate("document.querySelector('mark')?.textContent"),
+
+  const click = selector => until(() => evaluate(
+    "(() => { const button = document.querySelector(" + JSON.stringify(selector)
+    + "); if (!button?.offsetWidth || button.disabled) return false; button.click(); return true; })()",
+  ), "Button not ready: " + selector);
+  const clickText = text => until(() => evaluate(
+    "(() => { const button = [...document.querySelectorAll('button')].find(b => b.offsetWidth && !b.disabled && b.textContent.includes("
+    + JSON.stringify(text) + ")); if (!button) return false; button.click(); return true; })()",
+  ), "Button not ready: " + text);
+  const tab = name => click('nav button[aria-controls="' + name + '"]');
+  const decision = value => until(() => evaluate(
+    "document.querySelector('#reviews .verdict strong')?.dataset.decision === " + JSON.stringify(value),
+  ), "Decision was not rendered: " + value);
+  const fitsViewport = async () => {
+    assert(await evaluate("document.documentElement.scrollWidth <= innerWidth"), "Page overflows horizontally");
+  };
+  const capture = async target => {
+    if (!target) return;
+    await until(() => evaluate("document.getAnimations().every(a => a.playState !== 'running')"),
+      "Page motion did not settle");
+    const screenshot = await call("Page.captureScreenshot", { format: "png" });
+    writeFileSync(target, Buffer.from(screenshot.data, "base64"));
+  };
+  await click('[data-review-id="sample-c5-initial"]');
+  await decision("SUPPORTED");
+  await fitsViewport();
+  if (width && width <= 760) {
+    await until(() => evaluate(
+      "(() => { const row = document.querySelector('#reviews .rail [aria-pressed=true]');"
+      + "const rail = row.closest('ul').getBoundingClientRect(); const card = row.getBoundingClientRect();"
+      + "return card.left >= rail.left - 1 && card.right <= rail.right + 1; })()",
+    ), "The selected mobile card is clipped");
+  }
+  await capture(process.argv[3]);
+  await click('[data-citation-id="sample-revenue-original"]');
+  assert.match(await until(() => evaluate("document.querySelector('#library mark')?.textContent"),
     "Citation did not open a highlighted page"), /12,000.00/);
-  await clickText("观点审查");
-  await clickText("变化影响");
+  await fitsViewport();
+
+  const pdf = process.env.FINCOURT_SMOKE_PDF;
+  if (pdf) {
+    await clickText("导入 PDF");
+    const root = (await call("DOM.getDocument")).root.nodeId;
+    const { nodeId } = await call("DOM.querySelector", { nodeId: root, selector: '#library input[type="file"]' });
+    await call("DOM.setFileInputFiles", { nodeId, files: [pdf] });
+    await evaluate(
+      "(() => { const fields = document.querySelector('#library form').elements;"
+      + "fields.title.value = '浏览器上传样例'; fields.id.value = 'browser-smoke-' + Date.now();"
+      + "fields.subject.value = 'TEST'; fields.date.value = '2025-02-28';"
+      + "fields.namedItem('source').value = 'SIMULATED'; })()",
+    );
+    await click("#library form button[type=submit]");
+    await until(() => evaluate("document.querySelector('#library form [role=status]')?.textContent.includes('已导入')"),
+      "The PDF form did not import the document");
+  }
+
+  await tab("impact");
   await clickText("导入模拟更正");
-  await until(() => evaluate("document.querySelector('main').innerText.includes('0.92 亿元')"),
+  await until(() => evaluate("document.querySelector('#impact .amount-slip.changed dd')?.textContent.includes('0.92 亿元')"),
     "Correction impact was not rendered");
-  await clickText("跟踪星桥样例公司");
-  await until(() => evaluate("document.querySelector('.verdict')?.textContent.includes('被适用证据反驳')"),
-    "Corrected rolling review was not rendered");
-  await clickText("2025-03-01 · 有证据支持");
-  assert.equal(await evaluate("document.querySelector('.verdict strong').textContent"), "有证据支持");
-  console.log("Browser workflow passed: cited page, correction import, impacted review, saved history");
+  await fitsViewport();
+  await capture(process.env.FINCOURT_SMOKE_IMPACT_SCREENSHOT);
+  await click('[data-impact-claim="sample-c5"]');
+  await decision("REFUTED");
+  await click('[data-review-id="sample-c5-initial"]');
+  await decision("SUPPORTED");
+  await call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  assert.equal(await evaluate("getComputedStyle(document.querySelector('#reviews')).animationName"), "none");
+  console.log(
+    "Browser workflow passed: cited page, correction, saved history, " + (width || "desktop") + " layout and reduced motion",
+  );
   const admin = process.env.FINCOURT_SMOKE_ADMIN;
   if (admin) {
-    const ready = text => until(() => evaluate(
-      "[...document.querySelectorAll('button')].some(b => b.offsetWidth && !b.disabled && b.textContent === "
-      + JSON.stringify(text) + ")",
-    ), "Button not ready: " + text);
-    await clickText("知识版本");
-    await ready("验证补丁");
+    await tab("knowledge");
     await clickText("验证补丁");
-    await until(() => evaluate("document.querySelector('main').innerText.includes('候选版本可保存条件协议')"),
+    await until(() => evaluate("document.querySelector('#knowledge [data-patch-status=READY_FOR_REVIEW] .agreement-facts')?.offsetWidth"),
       "Agreement preview not rendered");
     // Use the native setter so React sees the test input event.
     await evaluate("(() => { const input = document.querySelector('input[type=password]'); "
       + "Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, "
       + JSON.stringify(admin) + "); input.dispatchEvent(new Event('input', {bubbles:true})); })()");
-    await ready("批准补丁");
     await clickText("批准补丁");
-    await ready("发布知识版本");
     await clickText("发布知识版本");
-    await until(() => evaluate("document.querySelector('main').innerText.includes('当前协议投影')"),
+    await until(() => evaluate("document.querySelector('#knowledge [data-projection-document]')?.offsetWidth"),
       "Published agreement projection not rendered");
     await evaluate("(() => { const select = document.querySelector('select[aria-label=回滚版本]'); "
       + "select.value = 'fincourt-disclosures-v1'; select.dispatchEvent(new Event('change', {bubbles:true})); })()");
-    await ready("回滚");
-    await clickText("回滚");
-    await until(() => evaluate("document.querySelector('main').innerText.includes('待处理协议 1 份')"),
+    await click("#knowledge .version-actions button");
+    await until(() => evaluate("document.querySelector('#knowledge [data-pending-documents]')?.dataset.pendingDocuments === '1'"),
       "Rollback did not restore pending agreement status");
     console.log("Browser workflow passed: validated, approved, published and rolled back knowledge bundle");
   }

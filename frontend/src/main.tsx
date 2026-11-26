@@ -8,11 +8,19 @@ import { Reviews } from "./Reviews";
 import { request, type Disclosure } from "./api";
 import "./styles.css";
 
+const tabs = [
+  { id: "reviews", label: "观点", title: "观点审查" },
+  { id: "library", label: "资料", title: "资料库" },
+  { id: "impact", label: "变化", title: "变化影响" },
+  { id: "knowledge", label: "版本", title: "知识版本" },
+] as const;
+type Tab = (typeof tabs)[number]["id"];
+
 function App() {
   const [documents, setDocuments] = useState<Disclosure[]>([]);
   const [error, setError] = useState("");
   const [mode, setMode] = useState("");
-  const [tab, setTab] = useState<"reviews" | "library" | "impact" | "knowledge">("reviews");
+  const [tab, setTab] = useState<Tab>("reviews");
   const [revision, setRevision] = useState(0);
   const [target, setTarget] = useState<{ claim: string; run: string } | null>(null);
   const [location, setLocation] = useState<Location | null>(null);
@@ -30,7 +38,12 @@ function App() {
 
   function openCitation(place: Location) {
     setLocation(place);
-    setTab("library");
+    navigate("library");
+  }
+
+  function navigate(next: Tab) {
+    setTab(next);
+    window.scrollTo(0, 0);
   }
 
   function updateData() {
@@ -40,23 +53,30 @@ function App() {
 
   return (
     <>
-      <header className="top"><div className="top-inner">
-        <div className="brand"><span className="brand-mark" aria-hidden="true">证</span><strong>明证 <span>FinCourt</span></strong></div>
-        <nav aria-label="工作台">
-          <button aria-current={tab === "reviews" ? "page" : undefined} onClick={() => setTab("reviews")}>观点审查</button>
-          <button aria-current={tab === "library" ? "page" : undefined} onClick={() => { setLocation(null); setTab("library"); }}>资料库</button>
-          <button aria-current={tab === "impact" ? "page" : undefined} onClick={() => setTab("impact")}>变化影响</button>
-          <button aria-current={tab === "knowledge" ? "page" : undefined} onClick={() => setTab("knowledge")}>知识版本</button>
-        </nav>
-        <span className="mode">{mode === "fixture" ? "fixture · 离线模式" : mode}</span>
-      </div></header>
+      <header className="top">
+        <div className="top-inner">
+          <button type="button" className="brand" onClick={() => navigate("reviews")}>
+            <span className="brand-mark" aria-hidden="true">明</span>
+            <span>FinCourt</span>
+          </button>
+          <nav className="navigation" aria-label="工作台">
+            {tabs.map(item => (
+              <button key={item.id} type="button" aria-label={item.title} aria-controls={item.id}
+                aria-current={tab === item.id ? "page" : undefined} onClick={() => navigate(item.id)}>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+          {mode && <span className="mode" data-mode={mode} title={mode === "fixture" ? "离线模式" : "实时模式"}>{mode}</span>}
+        </div>
+      </header>
       <main>
         {error && <p className="error" role="alert">{error}</p>}
-        <div hidden={tab !== "reviews"}><Reviews mode={mode} target={target} revision={revision} openCitation={openCitation} /></div>
-        <div hidden={tab !== "library"}><Library documents={documents} location={location} onImport={updateData} /></div>
-        <div hidden={tab !== "impact"}><Impact mode={mode} revision={revision} onImport={updateData}
-          onReview={(claim, run) => { setTarget({ claim, run }); setTab("reviews"); }} /></div>
-        <div hidden={tab !== "knowledge"}><Knowledge visible={tab === "knowledge"} openCitation={openCitation} /></div>
+        <div className="workspace-view" id="reviews" hidden={tab !== "reviews"}><Reviews mode={mode} target={target} revision={revision} openCitation={openCitation} /></div>
+        <div className="workspace-view" id="library" hidden={tab !== "library"}><Library documents={documents} location={location} visible={tab === "library"} onImport={updateData} /></div>
+        <div className="workspace-view" id="impact" hidden={tab !== "impact"}><Impact mode={mode} revision={revision} onImport={updateData}
+          onReview={(claim, run) => { setTarget({ claim, run }); navigate("reviews"); }} /></div>
+        <div className="workspace-view" id="knowledge" hidden={tab !== "knowledge"}><Knowledge visible={tab === "knowledge"} openCitation={openCitation} /></div>
       </main>
     </>
   );

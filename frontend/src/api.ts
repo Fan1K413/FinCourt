@@ -17,6 +17,22 @@ export async function request<T>(path: string, data?: unknown): Promise<T> {
 export type Source = "REAL" | "SIMULATED";
 export const sourceLabels: Record<Source, string> = { REAL: "真实公告", SIMULATED: "模拟资料" };
 
+export type Decision = "SUPPORTED" | "REFUTED" | "DISPUTED" | "INSUFFICIENT";
+export const decisions: Record<Decision, string> = {
+  SUPPORTED: "有证据支持",
+  REFUTED: "被证据反驳",
+  DISPUTED: "存在争议",
+  INSUFFICIENT: "证据不足",
+};
+
+export const units: Record<string, string> = { yuan: "元", wan_yuan: "万元", yi_yuan: "亿元" };
+
+export function formatDecimal(value: string) {
+  const [whole, fraction] = value.split(".");
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return fraction === undefined ? grouped : grouped + "." + fraction;
+}
+
 export interface Disclosure {
   id: string;
   title: string;
